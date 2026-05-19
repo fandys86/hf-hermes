@@ -35,31 +35,15 @@ ls -al /data/.hermes/
 ls -al /data/.hermes/skills/
 
 # ==================== 数据恢复 ====================
-# 跳过从 Dataset 恢复 config.yaml（由本脚本根据环境变量重新生成）
 export SKIP_CONFIG_RESTORE=true
 
-# 健壮恢复：能拉就拉，拉不到/报错就静默跳过，绝不阻塞启动
 if [ -n "$HF_DATASET_REPO" ]; then
     echo "📥 尝试从 Dataset 恢复数据..."
-
-    # 先检查数据集是否存在且可访问（避免无效请求挂起）
-    if python3 -c "
-from huggingface_hub import dataset_info
-try:
-    dataset_info('$HF_DATASET_REPO', token='$HF_TOKEN')
-    print('DATASET_OK')
-except Exception:
-    print('DATASET_FAIL')
-" 2>/dev/null | grep -q "DATASET_OK"; then
-
-        # 数据集存在，尝试恢复（带 60 秒超时，防止卡死）
-        if timeout 60 python -m src.data_sync restore 2>/dev/null; then
-            echo "   ✅ 数据恢复成功"
-        else
-            echo "   ⚠️  数据恢复失败或超时，使用空配置启动（不影响运行）"
-        fi
+    # 加 60 秒超时，失败不阻塞
+    if timeout 60 python -m src.data_sync restore 2>/dev/null; then
+        echo "   ✅ 数据恢复成功"
     else
-        echo "   ⚠️  数据集不可访问或不存在，跳过恢复，使用空配置启动"
+        echo "   ⚠️  数据恢复失败或超时，使用空配置启动"
     fi
 else
     echo "   ℹ️ 未设置 HF_DATASET_REPO，跳过数据恢复"
