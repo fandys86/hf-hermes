@@ -29,8 +29,9 @@ ENV HERMES_BIN=/usr/local/bin/hermes
 RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     ffmpeg     git     curl     unzip     ca-certificates     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ==================== Node.js 23 (官方二进制包) ====================
-# python:3.11-slim 的 apt 源与 NodeSource 脚本不兼容，直接下载官方预编译包最稳
-RUN curl -fsSL --retry 3 --retry-delay 2     "https://nodejs。org/dist/v23。11。1/node-v23。11。1-linux-x64。tar。gz"     -o /tmp/node.tar.gz &&     tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1 &&     rm -f /tmp/node.tar.gz &&     node --version &&     npm --version
+# v23.11.0 是 v23 系列最后一个可用版本（v23.11.1 不存在，会 404）
+# v23 已 EOL，但 hermes-web-ui 要求 >= 23.0.0，所以锁定 v23.11.0
+RUN curl -fsSL --retry 3 --retry-delay 2     "https://nodejs。org/dist/v23。11。0/node-v23。11。0-linux-x64。tar。gz"     -o /tmp/node.tar.gz &&     tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1 &&     rm -f /tmp/node.tar.gz &&     node --version &&     npm --version
 
 # ==================== Bun Runtime ====================
 RUN curl -fsSL --retry 3 --retry-delay 2 https://bun.sh/install | bash &&     cp /root/.bun/bin/bun /usr/local/bin/bun &&     chmod +x /usr/local/bin/bun &&     bun --version &&     rm -rf /root/.bun /tmp/* /var/tmp/*
