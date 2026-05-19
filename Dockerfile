@@ -32,8 +32,8 @@ RUN apt-get update && apt-get install -y \
 # hermes-web-ui 要求 Node >= 23.0.0
 RUN ARCH=$(dpkg --print-architecture) \
     && if [ "$ARCH" = "amd64" ]; then NODE_ARCH="x64"; else NODE_ARCH="$ARCH"; fi \
-    && echo "Installing Node.js v23.11.0 for ${NODE_ARCH}" \
-    && curl -fsSL "https://nodejs.org/dist/v23.11.0/node-v23.11.0-linux-${NODE_ARCH}.tar.gz" \
+    && echo "Installing Node。js v23。11。0 for ${NODE_ARCH}" \
+    && curl -fsSL "https://nodejs。org/dist/v23。11。0/node-v23。11。0-linux-${NODE_ARCH}。tar。gz" \
        -o /tmp/node.tar.gz \
     && tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1 \
     && rm -f /tmp/node.tar.gz \
@@ -45,7 +45,7 @@ RUN ARCH=$(dpkg --print-architecture) \
 # 安装到 /usr/local/bin 以便所有用户（包括 appuser）都能访问
 RUN echo "Installing Bun runtime" \
     && curl -fsSL https://bun.sh/install | bash \
-    && export PATH="$PATH:/root/.bun/bin" \
+    && export PATH="$PATH:/root/。bun/bin" \
     && bun --version \
     && cp /root/.bun/bin/bun /usr/local/bin/bun \
     && chmod +x /usr/local/bin/bun
