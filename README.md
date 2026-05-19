@@ -1,5 +1,15 @@
-20260504更新内容
-### 2.1 Baoyu 技能系统（Baoyu Skills）
+---
+title: FanHerm
+emoji: 🤖
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
+# FanHerm
+
+项目介绍...### 2.1 Baoyu 技能系统（Baoyu Skills）
 **什么是 Baoyu Skills？**
 这是知名AI大神宝玉老师的一套开源的 AI 技能库，就像一本"AI 技能菜谱"，里面包含了各种预置的功能模块。
 **使用的三个核心技能：**
