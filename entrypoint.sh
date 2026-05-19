@@ -10,7 +10,8 @@
 
 set -e
 
-echo "🚀 Hermes Agent v0.10.0 - Hugging Face Spaces"
+HERMES_VER=$(hermes --version 2>/dev/null | head -1 || echo "unknown")
+echo "🚀 Hermes Agent ${HERMES_VER} - Hugging Face Spaces"
 echo "=============================================="
 
 # 确保 bun 在 PATH 中（baoyu-skills 子进程需要）
@@ -34,19 +35,33 @@ ls -al /data/
 ls -al /data/.hermes/
 ls -al /data/.hermes/skills/
 
+# ==================== 启动前清理脏配置 + 调试输出 ====================
+echo "🧹 清理可能存在的脏配置..."
+rm -f /data/.hermes/config.yaml
+rm -f /data/.hermes/config.yaml.restored
+echo "   ✅ 已清理旧配置，将重新生成"
+echo ""
+echo "🔍 调试：环境变量检查"
+echo "   MODEL_PROVIDER=${MODEL_PROVIDER:-'(未设置)'}"
+echo "   MODEL_NAME=${MODEL_NAME:-'(未设置)'}"
+echo "   SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY:+已设置(长度${#SILICONFLOW_API_KEY})}"
+echo "   NVIDIA_API_KEY=${NVIDIA_API_KEY:+已设置(长度${#NVIDIA_API_KEY})}"
+echo "   OPENROUTER_API_KEY=${OPENROUTER_API_KEY:+已设置}"
+echo "   HF_TOKEN=${HF_TOKEN:+已设置(长度${#HF_TOKEN})}"
+echo "   HF_DATASET_REPO=${HF_DATASET_REPO:-'(未设置)'}"
+echo ""
+
 # ==================== 数据恢复 ====================
+# 跳过从 Dataset 恢复 config.yaml（由本脚本根据环境变量重新生成）
 export SKIP_CONFIG_RESTORE=true
 
 if [ -n "$HF_DATASET_REPO" ]; then
-    echo "📥 尝试从 Dataset 恢复数据..."
-    # 加 60 秒超时，失败不阻塞
+    echo "📥 从 Dataset 恢复数据..."
     if timeout 60 python -m src.data_sync restore 2>/dev/null; then
         echo "   ✅ 数据恢复成功"
     else
         echo "   ⚠️  数据恢复失败或超时，使用空配置启动"
     fi
-else
-    echo "   ℹ️ 未设置 HF_DATASET_REPO，跳过数据恢复"
 fi
 
 # ==================== 模型配置系统 ====================
@@ -54,8 +69,8 @@ echo "🤖 配置模型系统..."
 
 # ---- 供应商定义 ----
 declare -A PROVIDER_MODELS=(
-    ["nvidia"]="moonshotai/kimi-k2-thinking"
-    ["siliconflow"]="Pro/moonshotai/Kimi-K2.5"
+    ["siliconflow"]="deepseek-ai/deepseek-v4-flash"
+    ["nvidia"]="moonshotai/kimi-k2.6"
     ["openai"]="gpt-4o"
     ["anthropic"]="claude-3-5-sonnet-20241022"
     ["google"]="gemini-2.0-flash"
@@ -87,12 +102,39 @@ declare -A PROVIDER_BASE_URLS=(
 )
 
 # ---- 检测主模型 ----
+# 优先级：1. MODEL_PROVIDER+MODEL_NAME 手动设置 > 2. 从 MODEL_NAME 推断 provider > 3. 按 Key 自动检测
 detect_main_model() {
+    # 优先级1：用户明确设置了 MODEL_PROVIDER + MODEL_NAME
     if [ -n "$MODEL_PROVIDER" ] && [ -n "$MODEL_NAME" ]; then
         echo "manual:$MODEL_PROVIDER:$MODEL_NAME"
         return
     fi
-    for provider in nvidia siliconflow openai anthropic google openrouter longcat; do
+
+    # 优先级2：MODEL_NAME 设置了但 MODEL_PROVIDER 没设置，尝试推断
+    if [ -n "$MODEL_NAME" ]; then
+        # 根据 MODEL_NAME 推断 provider
+        if [[ "$MODEL_NAME" == */deepseek* ]] || [[ "$MODEL_NAME" == */qwen* ]] || [[ "$MODEL_NAME" == Pro/* ]]; then
+            if [ -n "$SILICONFLOW_API_KEY" ]; then
+                echo "inferred:siliconflow:$MODEL_NAME"
+                return
+            fi
+        fi
+        if [[ "$MODEL_NAME" == nvidia/* ]] || [[ "$MODEL_NAME" == meta/* ]] || [[ "$MODEL_NAME" == google/* ]]; then
+            if [ -n "$NVIDIA_API_KEY" ]; then
+                echo "inferred:nvidia:$MODEL_NAME"
+                return
+            fi
+        fi
+        if [[ "$MODEL_NAME" == */free ]] || [[ "$MODEL_NAME" == openrouter/* ]]; then
+            if [ -n "$OPENROUTER_API_KEY" ]; then
+                echo "inferred:openrouter:$MODEL_NAME"
+                return
+            fi
+        fi
+    fi
+
+    # 优先级3：按 Key 自动检测（siliconflow 优先于 nvidia，避免 NVIDIA 覆盖）
+    for provider in siliconflow nvidia openai anthropic google openrouter longcat; do
         api_key_var="${PROVIDER_API_KEYS[$provider]}"
         if [ -n "${!api_key_var}" ]; then
             if [ -n "$MODEL_NAME" ]; then
@@ -107,7 +149,7 @@ detect_main_model() {
         echo "auto:gemini:${PROVIDER_MODELS[gemini]}"
         return
     fi
-    echo "default:nvidia:${PROVIDER_MODELS[nvidia]}"
+    echo "default:siliconflow:${PROVIDER_MODELS[siliconflow]}"
 }
 
 # ---- 检测辅助模型 ----
@@ -246,6 +288,8 @@ terminal:
     - SILICONFLOW_API_KEY
     - GOOGLE_IMAGE_MODEL
     - GOOGLE_BASE_URL
+    - TAVILY_API_KEY
+    - HF_TOKEN
 
 # 显示配置
 display:
@@ -300,13 +344,20 @@ RESTORED = '/data/.hermes/config.yaml.restored'
 # ENTRYPOINT_PRIORITY  → entrypoint.sh 生成的值优先（由 HF Spaces 环境变量控制）
 # USER_PRIORITY        → 恢复的用户值优先（Web UI 中用户修改的偏好）
 ENTRYPOINT_PRIORITY = {'model', 'auxiliary', 'delegation', 'api_server'}
-USER_PRIORITY = {'platforms', 'display', 'agent', 'memory', 'compression', 'cron', 'terminal'}
+USER_PRIORITY = {'display', 'agent', 'memory', 'compression', 'cron', 'terminal'}
+    # platforms 被移除：防止 Web UI 添加的飞书/微信脏配置污染 Gateway
 
 try:
     with open(GENERATED) as f:
         generated = yaml.safe_load(f) or {}
     with open(RESTORED) as f:
         restored = yaml.safe_load(f) or {}
+
+    # 清理可能导致 Gateway 崩溃的脏配置
+    if 'platforms' in restored:
+        del restored['platforms']
+    if 'home_channel' in restored:
+        del restored['home_channel']
 
     merged = {}
 
@@ -424,6 +475,9 @@ PERSISTENT_VARS=(
     "WHATSAPP_BUSINESS_ID" "WHATSAPP_PHONE_NUMBER" "WHATSAPP_ACCESS_TOKEN"
     "WEIXIN_ACCOUNT_ID" "WEIXIN_TOKEN" "WEIXIN_BASE_URL"
     "GATEWAY_ALLOW_ALL_USERS"
+    "HF_TOKEN"
+    "HF_DATASET_REPO"
+    "TAVILY_API_KEY"
     "AUTH_TOKEN"
 )
 
@@ -1225,11 +1279,11 @@ update_hermes_web_ui() {
     echo "   ✅ hermes-web-ui 已更新至 ${CLONED_VERSION}"
 }
 
-# 如果设置了 WEBUI_AUTO_UPDATE=true，则执行更新
-if [ "${WEBUI_AUTO_UPDATE:-true}" = "true" ]; then
-    update_hermes_web_ui
+# HF Spaces 免费版没有 root 权限，禁止 npm install
+if [ "${WEBUI_AUTO_UPDATE:-false}" = "true" ]; then
+    echo "   ⚠️  Web UI 自动更新在 HF Spaces 免费版上不可用（无 npm 权限）"
 else
-    echo "   ℹ️ Web UI 自动更新已禁用 (WEBUI_AUTO_UPDATE=false)"
+    echo "   ℹ️ Web UI 自动更新已禁用 (HF Spaces 免费版无 npm 权限)"
 fi
 
 # ==================== 启动 Web UI (BFF Server + Image Proxy) ====================
@@ -1257,10 +1311,10 @@ cleanup() {
     echo ""
     echo "🛑 执行清理..."
 
-    # 备份数据
+    # 备份数据（带超时，防止卡死）
     if [ -n "$HF_DATASET_REPO" ]; then
-        echo "   💾 执行最终数据备份..."
-        python -m src.data_sync backup --force 2>/dev/null || echo "   ⚠️ 备份失败"
+        echo "   💾 执行最终数据备份（最多 120 秒）..."
+        timeout 120 python -m src.data_sync backup --force 2>/dev/null || echo "   ⚠️ 备份失败或超时"
     fi
 
     # 停止各进程（顺序：ImageProxy → BFF → Gateway → Sync）
