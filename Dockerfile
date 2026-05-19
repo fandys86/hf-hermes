@@ -1,8 +1,12 @@
 # ==================== Stage 1: Build Web UI ====================
-# 单独构建前端，避免 node_modules 和构建工具污染最终镜像
-FROM node:23-slim AS ui-builder
+# 用完整版 node:23（非 slim），确保 python3/make/g++ 齐全，
+# node-pty 等原生模块能顺利编译。Stage 1 不进入最终镜像，体积不影响。
+FROM node:23 AS ui-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# 扩大 Node 堆内存，避免 HF Spaces 构建容器内存不足导致 vite build 被 OOM kill
+ENV NODE_OPTIONS=--max-old-space-size=4096
 
 RUN git clone --depth 1 https://github.com/EKKOLearnAI/hermes-web-ui.git /tmp/ui &&     cd /tmp/ui &&     npm pkg delete scripts.prepare &&     npm install &&     npm run build &&     npm prune --omit=dev &&     mkdir -p /opt/hermes-web-ui &&     cp -r dist node_modules package.json /opt/hermes-web-ui/ &&     cd / && rm -rf /tmp/ui /root/.npm /root/.cache /tmp/* /var/tmp/*
 
@@ -22,11 +26,9 @@ ENV UPSTREAM=http://127.0.0.1:8642
 ENV HERMES_BIN=/usr/local/bin/hermes
 
 # ==================== 系统依赖 + bash ====================
-# bash: NodeSource 脚本需要；ca-certificates: HTTPS 下载需要
 RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     ffmpeg     git     curl     unzip     ca-certificates     bash     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ==================== Node.js 23 (NodeSource) ====================
-# 使用 NodeSource 官方源，比手动下载 tar.gz 更稳定
 RUN curl -fsSL --retry 3 --retry-delay 2 https://deb.nodesource.com/setup_23.x | bash - &&     apt-get install -y nodejs &&     node --version &&     npm --version &&     apt-get clean &&     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ==================== Bun Runtime ====================
@@ -46,7 +48,6 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt &&     rm -f /tmp/requir
 RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /tmp/hermes-agent &&     pip install --no-cache-dir /tmp/hermes-agent[all] &&     rm -rf /tmp/hermes-agent /root/.cache/pip
 
 # ==================== Playwright 浏览器 ====================
-# 安装后立刻清理 apt 缓存，减少镜像体积
 RUN npx playwright install chromium --with-deps --only-shell &&     apt-get clean &&     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /root/.cache
 
 # ==================== 复制 Web UI 构建产物 ====================
