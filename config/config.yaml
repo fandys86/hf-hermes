@@ -4,7 +4,7 @@
 
 # 主模型配置
 model:
-  default: "moonshotai/kimi-k2-thinking"
+  默认: "moonshotai/kimi-k2-thinking"
   provider: "nvidia"
   base_url: "https://integrate.api.nvidia.com/v1"
 
@@ -69,7 +69,7 @@ terminal:
 
 # 显示配置
 display:
-  skin: default
+  skin: 默认
   show_tool_progress: true
   show_resume: true
   spinner: dots
