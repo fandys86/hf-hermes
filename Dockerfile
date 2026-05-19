@@ -25,11 +25,12 @@ ENV PORT=7860
 ENV UPSTREAM=http://127.0.0.1:8642
 ENV HERMES_BIN=/usr/local/bin/hermes
 
-# ==================== 系统依赖 + bash ====================
-RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     ffmpeg     git     curl     unzip     ca-certificates     bash     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+# ==================== 系统依赖 ====================
+RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     ffmpeg     git     curl     unzip     ca-certificates     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# ==================== Node.js 23 (NodeSource) ====================
-RUN curl -fsSL --retry 3 --retry-delay 2 https://deb.nodesource.com/setup_23.x | bash - &&     apt-get install -y nodejs &&     node --version &&     npm --version &&     apt-get clean &&     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+# ==================== Node.js 23 (官方二进制包) ====================
+# python:3.11-slim 的 apt 源与 NodeSource 脚本不兼容，直接下载官方预编译包最稳
+RUN curl -fsSL --retry 3 --retry-delay 2     "https://nodejs。org/dist/v23。11。1/node-v23。11。1-linux-x64。tar。gz"     -o /tmp/node.tar.gz &&     tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1 &&     rm -f /tmp/node.tar.gz &&     node --version &&     npm --version
 
 # ==================== Bun Runtime ====================
 RUN curl -fsSL --retry 3 --retry-delay 2 https://bun.sh/install | bash &&     cp /root/.bun/bin/bun /usr/local/bin/bun &&     chmod +x /usr/local/bin/bun &&     bun --version &&     rm -rf /root/.bun /tmp/* /var/tmp/*
